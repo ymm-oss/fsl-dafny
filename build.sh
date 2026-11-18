@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+#
+# fsl-dafny (ymm-oss/fsl#1908): spec -> Kernel -> Dafny -> proof -> JS, for one spec.
+# usage: ./build.sh <Name> <spec.fsl> [<widen-list>]   e.g. ./build.sh SeatBooking specs/seat_booking.fsl SeatId,UserId
+# `symmetric` types of the spec are always widened; the list adds more.
+# Exit 1: the proof file is malformed, weakens the proof, or does not verify.
+# Exit 2: the spec cannot be translated (see below).
+set -euo pipefail
+cd "$(dirname "$0")"
+name=$1 spec=$2 widen=${3:-}
+fslc=${FSLC:-fslc}
+mkdir -p out
+
+# Exit 2: the spec does not lower to the Kernel or uses a form gen.mjs does not translate.
+"$fslc" kernel "$spec" > "out/$name.kernel.json" || exit 2
+# GEN_FLAGS: extra gen.mjs flags (core.mjs passes --liveness-by-fslc).
+# shellcheck disable=SC2086
+node gen.mjs "out/$name.kernel.json" ${widen:+--widen "$widen"} --name "$name" ${GEN_FLAGS:-} > "out/$name.gen.dfy" || exit 2
+
+proof="${PROOF:-proofs/$name.proof.dfy}"
+# The proof file must be one module that refines the generated one, including
+# nothing else; otherwise it could export its own, weaker <Name>Proof.
+code=$(grep -vE '^\s*(//.*)?$' "$proof")
+if [ "$(grep -oE '\binclude\b' <<<"$code" | wc -l | tr -d ' ')" != 1 ] ||
+   ! grep -qxE "include \"\.\./out/$name\.gen\.dfy\"" <<<"$code" ||
+   [ "$(grep -oE '\bmodule\b' <<<"$code" | wc -l | tr -d ' ')" != 1 ] ||
+   ! grep -qxE "module ${name}Proof refines ${name}Spec \{" <<<"$code"; then
+  echo "structure: $proof must include only ../out/$name.gen.dfy and declare only 'module ${name}Proof refines ${name}Spec'" >&2
+  exit 1
+fi
+# The proof module may not assume anything: no assume, no axioms, no bodiless lemmas.
+audit=$(dafny audit "$proof" 2>&1 || true)
+if ! grep -q 'completed with 0 findings' <<<"$audit" || grep -qi 'warning' <<<"$audit"; then
+  echo "$audit" >&2
+  echo "audit: $proof weakens the proof" >&2
+  exit 1
+fi
+
+# Included files are not verified by default; the generated module has its own
+# obligations (index ranges, termination, StepPreserves).
+dafny verify --verify-included-files "$proof"
+dafny translate js --include-runtime "$proof" -o "out/$name" > /dev/null
+# Expose the compiled module to Node.
+{
+  cat "out/$name.js"
+  echo "module.exports = { M: ${name}Proof, _dafny, BigNumber };"
+} > "out/$name.cjs"
+# The TypeScript entry point over the compiled module.
+node gen-ts.mjs "out/$name.kernel.json" ${widen:+--widen "$widen"} --name "$name" > "out/$name.ts"
+node -e 'import("./gen-ts.mjs").then((m) => process.stdout.write(m.CJS_DTS))' > "out/$name.d.cts"
+echo "built out/$name.cjs out/$name.ts"

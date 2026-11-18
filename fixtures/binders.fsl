@@ -1,0 +1,39 @@
+// SPDX-License-Identifier: Apache-2.0
+// fsl-dafny fixture: quantifier binders with `where` filters and over a
+// collection (ymm-oss/fsl#1927). Only nodes below LIMIT can be raised, so an
+// invariant whose `where` filter were dropped would be false once one is.
+spec Binders {
+  symmetric type Node = 0..3
+  const LIMIT = 2
+
+  state {
+    up:   Map<Node, Bool>,
+    seen: Set<Node>
+  }
+
+  init {
+    forall n: Node { up[n] = false }
+    seen = Set {}
+  }
+
+  action raise(n: Node) {
+    requires n < LIMIT
+    requires not up[n]
+    up[n] = true
+    seen = seen.add(n)
+  }
+
+  action lower(n: Node) {
+    requires up[n]
+    up[n] = false
+  }
+
+  // a typed binder with a filter
+  invariant HighNodesStayDown { forall n: Node where n >= LIMIT { not up[n] } }
+  // an int range binder with a filter
+  invariant RangeFiltered { forall i in 0..3 where i >= LIMIT { not seen.contains(i) } }
+  // a binder over a Set, with and without a filter
+  invariant SeenAreLow { forall x in seen { x < LIMIT } }
+  invariant UpWasSeen { forall n: Node where up[n] { seen.contains(n) } }
+  invariant SeenFiltered { forall x in seen where up[x] { x < LIMIT } }
+}

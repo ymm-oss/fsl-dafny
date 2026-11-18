@@ -1,0 +1,6 @@
+out/
+.ai/
+.ai-test/
+.ai-buggy/
+.loop/
+node_modules/

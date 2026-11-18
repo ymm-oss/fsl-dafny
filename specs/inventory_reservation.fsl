@@ -1,0 +1,69 @@
+// Inventory hold/confirm/release with a conservation invariant.
+// Res.item uses Option<ItemId> so a free reservation has no meaningless sentinel
+// item (previously worked around with item 0 when Free).
+spec InventoryReservation {
+  type ItemId = 0..1
+  type ResId  = 0..2
+  type Qty    = 0..4
+
+  enum RState { Free, Held, Confirmed }
+
+  struct Res { st: RState, item: Option<ItemId>, qty: Qty }
+
+  state {
+    available: Map<ItemId, Qty>,
+    res:       Map<ResId, Res>
+  }
+
+  init {
+    forall i: ItemId { available[i] = 2 }
+    forall r: ResId { res[r] = Res { st: Free, item: none, qty: 0 } }
+  }
+
+  action hold(r: ResId, i: ItemId, q: Qty) {
+    requires res[r].st == Free
+    requires q > 0
+    requires available[i] >= q
+    available[i] = available[i] - q
+    res[r] = Res { st: Held, item: some(i), qty: q }
+  }
+
+  action confirm(r: ResId) {
+    requires res[r].st == Held
+    res[r].st = Confirmed
+  }
+
+  action release(r: ResId) {
+    requires res[r].st == Held
+    requires res[r].item is some(i)
+    available[i] = available[i] + res[r].qty
+    res[r] = Res { st: Free, item: none, qty: 0 }
+  }
+
+  invariant FreeIsZero {
+    forall r: ResId { res[r].st == Free => res[r].qty == 0 }
+  }
+
+  invariant FreeHasNoItem {
+    forall r: ResId { res[r].st == Free => res[r].item == none }
+  }
+
+  invariant HeldHasItem {
+    forall r: ResId { res[r].st != Free => res[r].item != none }
+  }
+
+  invariant Conservation {
+    forall i: ItemId {
+      available[i]
+        + sum(r: ResId of res[r].qty
+              where res[r].st == Held and (res[r].item is some(j) and j == i))
+        + sum(r: ResId of res[r].qty
+              where res[r].st == Confirmed and (res[r].item is some(j) and j == i))
+      == 2
+    }
+  }
+
+  reachable AllHeld {
+    forall r: ResId { res[r].st != Free }
+  }
+}
