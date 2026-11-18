@@ -2,6 +2,7 @@
 //
 // fsl-dafny (ymm-oss/fsl#1908): one command from an FSL spec to a proved TypeScript core.
 //
+//   0. fslc verify at the spec's sizes: a `violated` spec stops here with fslc's counterexample
 //   1. fslc kernel -> gen.mjs -> out/<Name>.gen.dfy     (symmetric types widened)
 //   2. proof gates (build.sh): structure, dafny audit, dafny verify
 //      with --ai, a failing proof is rewritten by the model (prove.mjs) and re-gated
@@ -88,6 +89,30 @@ function once() {
       return fail(`widening ${t}`, { code: 2, out: "", err: `widen ${t}: its bound ${m[1]} is also read by the spec; widening would keep ${m[1]} fixed while ${t} grows\n` });
   }
 
+  // 0: fslc verify at the spec's own sizes. A spec that breaks an invariant, a
+  // type bound or a partial operation there cannot be proved; report fslc's
+  // counterexample instead of a Dafny error (or model attempts). Only `violated`
+  // stops the run: a `reachable` that is not reached is not a Dafny obligation.
+  const v = sh("verify", fslc, ["verify", spec]);
+  const verdict = (() => {
+    try {
+      return JSON.parse(v.out);
+    } catch {
+      return null;
+    }
+  })();
+  if (!verdict) return fail("fslc verify", { ...v, code: 1 });
+  if (verdict.result === "violated") {
+    const call = (a) => `${a.name}(${Object.entries(a.params ?? {}).map(([k, x]) => `${k}=${JSON.stringify(x)}`).join(", ")})`;
+    const steps = (verdict.trace ?? []).filter((t) => t.action).map((t) => `  ${t.step}. ${call(t.action)}${t.action.loc ? ` (line ${t.action.loc.line})` : ""}`);
+    const what = verdict.invariant ?? verdict.property ?? "a property";
+    return fail("fslc verify (the spec itself is violated; no proof can pass)", {
+      code: 1,
+      out: "",
+      err: `fslc verify: ${what} (${verdict.violation_kind ?? "violation"}) is violated at step ${verdict.violated_at_step ?? "?"}\n${steps.join("\n")}\nfull report: ${fslc} verify ${spec}\n`,
+    });
+  }
+
   // 1-3: translate, prove (optionally with the model), compile, generate TS.
   const b = flag("--ai")
     ? sh("prove", "node", ["prove.mjs", name, spec, ...(widen ? ["--widen", widen] : []), "--proof", proof, "--attempts", opt("--attempts", "3")], { stdio: ["ignore", "pipe", "inherit"] })
@@ -144,15 +169,8 @@ function once() {
 
   let liveness = null;
   if (livenessByFslc && kernel.properties.leads_to?.length) {
-    const v = sh("verify", fslc, ["verify", spec]);
-    const vr = (() => {
-      try {
-        return JSON.parse(v.out);
-      } catch {
-        return null;
-      }
-    })();
-    if (!vr || !["proved", "verified"].includes(vr.result)) return fail("fslc verify (liveness left to fslc)", v);
+    const vr = verdict; // step 0's run
+    if (!["proved", "verified"].includes(vr.result)) return fail("fslc verify (liveness left to fslc)", { ...v, code: 1 });
     liveness = { by: "fslc verify", result: vr.result, completeness: vr.completeness, leads_to: vr.leads_to };
   }
 

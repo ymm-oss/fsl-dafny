@@ -86,13 +86,13 @@ FSL のファイルは書き換えず、そのパスを `core.mjs` に渡しま�
 | 表示 | 意味 |
 |---|---|
 | `FAILED at fslc kernel` | fslc が仕様を受け付けていない。`fslc check` で確認する。 |
+| `FAILED at fslc verify` | 仕様のサイズで不変条件などが破れる。表示された action の列が反例なので、仕様を直す。 |
 | `unsupported: ...`（exit 2） | gen.mjs が翻訳できない構文を使っている。対応範囲は [docs/details.md](docs/details.md) にある。 |
-| Dafny の `Error`（`FAILED at proof gates`） | 証明が足りないか、仕様にバグがある。まず `fslc verify <spec>` で反例が出ないか確認する。 |
+| Dafny の `Error`（`FAILED at proof gates`） | 証明が足りないか、仕様のサイズより大きいときだけ破れるバグが仕様にある。 |
 | `divergences` が 1 以上 | 生成したコアが仕様と違う遷移をした。fsl-dafny の不具合なので報告してほしい。 |
 
 ### 既知の問題
 
-- 仕様のバグが反例ではなく Dafny のエラーとして返る（[#1](https://github.com/ymm-oss/fsl-dafny/issues/1)）。
 - 証明ファイルがない、または空のときのメッセージが分かりにくい。また、本体のない証明ファイルを置いたまま `--ai` を使うと、モデルを呼ばずに止まる（[#2](https://github.com/ymm-oss/fsl-dafny/issues/2)）。
 - 上限を `0..N - 1` のような式で書くと、ランダム検査のサイズがずれる（[#3](https://github.com/ymm-oss/fsl-dafny/issues/3)）。
 

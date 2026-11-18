@@ -291,11 +291,20 @@ else
   echo "skip  AI proof loop with a real model (RUN_AI=1 runs it with the claude CLI)"
 fi
 
-# A spec with a real bug: cart_v1's proof does not carry over to cart_v1_buggy.
-expect 1 "core.mjs refuses cart_v1_buggy (checkout can drive stock below 0)" node core.mjs specs/cart_v1_buggy.fsl --widen UserId,ItemId --seed 1
-# cart_buggy is cart_fixed without the stock guard: under cart_fixed's name, its proof must not verify.
-expect 1 "core.mjs refuses cart_buggy with cart_fixed's proof" node core.mjs specs/cart_buggy.fsl --name CartFixed --widen UserId,ItemId --seed 1
-grep -qE 'error|Error' out/last.log || { echo "FAIL  cart_buggy was not refused by Dafny"; status=1; }
+# A spec with a real bug: core.mjs stops at fslc verify with its counterexample,
+# before Dafny (ymm-oss/fsl-dafny#1).
+expect 1 "core.mjs refuses cart_v1_buggy at fslc verify (checkout can drive stock below 0)" node core.mjs specs/cart_v1_buggy.fsl --widen UserId,ItemId --seed 1
+grep -q '^fslc verify: _bounds_stock (type_bound) is violated' out/last.log && ! grep -q 'Dafny program verifier' out/last.log \
+  || { echo "FAIL  cart_v1_buggy was not stopped by fslc verify before Dafny"; status=1; }
+expect 1 "core.mjs refuses cart_buggy at fslc verify" node core.mjs specs/cart_buggy.fsl --name CartFixed --widen UserId,ItemId --seed 1
+grep -q '^fslc verify: NoNegativeStock (invariant) is violated' out/last.log && ! grep -q 'Dafny program verifier' out/last.log \
+  || { echo "FAIL  cart_buggy was not stopped by fslc verify before Dafny"; status=1; }
+# fslc verify checks the spec's sizes only; Dafny must refuse the same bugs on its own.
+# cart_v1's and cart_fixed's proofs do not carry over to their buggy variants.
+expect 1 "Dafny refuses cart_v1_buggy with cart_v1's proof" env PROOF=proofs/ShoppingCart.proof.dfy ./build.sh ShoppingCart specs/cart_v1_buggy.fsl UserId,ItemId
+grep -qE 'Dafny program verifier finished with [0-9]+ verified, [1-9][0-9]* errors?' out/last.log || { echo "FAIL  cart_v1_buggy was not refused by Dafny"; status=1; }
+expect 1 "Dafny refuses cart_buggy with cart_fixed's proof" env PROOF=proofs/CartFixed.proof.dfy ./build.sh CartFixed specs/cart_buggy.fsl UserId,ItemId
+grep -qE 'Dafny program verifier finished with [0-9]+ verified, [1-9][0-9]* errors?' out/last.log || { echo "FAIL  cart_buggy was not refused by Dafny"; status=1; }
 
 # Rebuild the real cores: the cheats above went through build.sh.
 expect 0 "rebuild SeatBooking" ./build.sh SeatBooking specs/seat_booking.fsl SeatId,UserId

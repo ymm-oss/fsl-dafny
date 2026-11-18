@@ -15,6 +15,8 @@ proposed in ymm-oss/fsl#1918.
 ```
 node core.mjs <spec.fsl> [--widen T1,T2] [--name N] [--ai] [--depth n] [--liveness-by-fslc] [--out <app dir>] [--watch]
 
+ fslc verify                                       at the spec's sizes; a `violated` spec stops
+                                                   here with fslc's counterexample, before Dafny
  fslc kernel ─> gen.mjs ─> out/<Name>.gen.dfy     abstract module: state, init, guards, updates,
                                                    proof obligations without bodies; `symmetric`
                                                    types become a size parameter
@@ -227,9 +229,12 @@ Negative controls in `run-all.sh`, each of which must be caught:
   ymm-oss/fsl#1927 (a `where` filter dropped, a `Set` binder taken as the whole
   type; Binders).
 - Proof: the lost stock guard, a weakened per-user cap, a generated module whose
-  `StepPreserves` lacks its proof, `cart_v1_buggy` and `cart_buggy` through
-  `core.mjs`, and a module with an unguarded `head()`/`pop()`
-  (`fixtures/negative/unguarded_head.fsl`) that Dafny does not verify.
+  `StepPreserves` lacks its proof, `cart_v1_buggy` and `cart_buggy` with
+  `cart_v1`'s and `cart_fixed`'s proofs (through `build.sh`), and a module with
+  an unguarded `head()`/`pop()` (`fixtures/negative/unguarded_head.fsl`) that
+  Dafny does not verify.
+- Spec check: `core.mjs` stops `cart_v1_buggy` and `cart_buggy` at `fslc verify`
+  with the violated property's name, before Dafny runs.
 - Translation: a binder of unknown kind or with an unknown field is refused
   (ymm-oss/fsl#1927). `mutex_queue`'s `leadsTo` is refused without `--liveness-by-fslc`,
   and widening `T` in `fixtures/negative/const_bound.fsl` (`type T = 0..M` with
