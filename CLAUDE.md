@@ -2,7 +2,7 @@
 
 # fsl-dafny: instructions for Claude Code
 
-`README.md` describes what each piece does and the current results. This file
+`docs/details.md` describes what each piece does and the current results. This file
 holds the working rules that are not there.
 
 ## Sources of truth
@@ -17,7 +17,7 @@ holds the working rules that are not there.
   exporter's actual output (`fslc kernel` on a small spec) and handle every field
   it emits.
 - **Pinned fslc**: v5.1.0 (CI downloads the release binary). Results in
-  `README.md` name the fslc, Dafny and Node versions they were measured with.
+  `docs/details.md` name the fslc, Dafny and Node versions they were measured with.
 - **History**: this started as the spike for ymm-oss/fsl#1908, in
   ymm-oss/fsl#1918 (closed, branch `spike/issue-1908-dafny-core`).
 
@@ -53,12 +53,12 @@ RUN_AI=1 ./run-all.sh                  # also the real-model proof-loop controls
   - Say who wrote each proof: the model through `prove.mjs`, or by hand.
 - **`specs/` is a copy.** These are fsl's specs, copied unchanged at d1df480b.
   Do not edit them. To refresh, copy them again from a named fsl commit and
-  update `README.md` (the SHA, results table) in the same change. This
+  update `docs/details.md` (the SHA, results table) in the same change. This
   repository's own specs go in `fixtures/`.
 - **`out/` is generated** and ignored; never commit it or hand-edit it.
 - **Changes to checks.** Run `run-all.sh` twice and require identical
   `out/core-results.jsonl`. Update the counts and the results table in
-  `README.md` from the run, not from memory.
+  `docs/details.md` from the run, not from memory.
 - New source files carry the Apache-2.0 SPDX header.
 
 ## Open items
